@@ -1,0 +1,118 @@
+{{- $application := "" -}}
+{{ if contains "lan" .Values.PROJECT_NAME  }}
+  {{- $application = .Values.applications.landing -}}
+{{ end }}
+{{- if $application.service }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  ports:
+    - protocol: TCP
+      port: {{ $application.service.port }}
+      targetPort: http
+  selector:
+    app: {{ .Release.Name }}
+---
+{{- end }}
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+spec:
+  replicas: {{ $application.container.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+    spec:
+      {{- if $application.container.volumes }}
+      volumes:
+      {{- toYaml $application.container.volumes | default "" | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Release.Name }}
+          image: '{{ .Values.DOCKER_REGISTRY }}/{{ $application.container.image }}:{{ .Values.PROJECT_BRANCH }}-{{ .Values.BUILD_NUMBER }}'
+          {{- if $application.container.command }}
+          command:
+            {{- toYaml $application.container.command | nindent 12 }}
+          {{- end }}
+          {{- if $application.container.args }}
+          args:
+            {{- toYaml $application.container.args | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml $application.container.resources | nindent 12}}
+          {{- if $application.container.env }}
+          env:
+            {{- toYaml $application.container.env | nindent 12 }}
+          {{- end }}
+          {{- if $application.container.envFrom }}
+          envFrom:
+            {{- toYaml $application.container.envFrom | nindent 12 }}
+          {{- end }}
+          {{- if $application.container.ports }}
+          ports:
+            - name: http
+              containerPort: {{ $application.container.ports.containerPort }}
+              protocol: TCP
+          {{- end }}
+          {{- if $application.container.livenessProbe }}
+          livenessProbe:
+            {{- toYaml $application.container.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if $application.container.readinessProbe }}
+          readinessProbe:
+            {{- toYaml $application.container.readinessProbe | nindent 12 }}
+          {{- end }}
+          {{- if $application.container.volumes }}
+          volumeMounts:
+            {{- toYaml $application.container.volumeMounts | default "" | nindent 12 }}
+          {{- end }}
+---
+{{- if $application.hpa }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-hpa
+  namespace: {{ .Release.Namespace }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Release.Name }}
+  minReplicas: {{ $application.hpa.minReplicas }}
+  maxReplicas: {{ $application.hpa.maxReplicas }}
+  metrics:
+    {{- if $application.hpa.cpuUsage }}
+    - type: Pods
+      pods:
+        metric:
+          name: cpu_usage
+        target:
+          type: Utilization
+          averageValue: {{ $application.hpa.cpuUsage }}
+    {{ end }}
+    {{- if $application.hpa.memoryUsage }}
+    - type: Pods
+      pods:
+        metric:
+          name: memory_usage_bytes
+        target:
+          type: Utilization
+          averageValue: {{ $application.hpa.memoryUsage }}
+    {{ end }}
+    {{- if $application.hpa.customMetric }}
+      {{- toYaml $application.hpa.customMetric | default "" | nindent 4 }}
+    {{- end }}
+{{- end }}

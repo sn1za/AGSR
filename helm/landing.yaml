@@ -1,0 +1,44 @@
+Namespace: myapp-namespace
+
+applications:
+  landing:
+    container:
+      image: someRegistry/mynginx
+      replicaCount: 3
+      ports:
+        containerPort: 80
+      resources:
+        limits:
+          cpu: 300m
+          memory: 300M
+        requests:
+          cpu: 100m
+          memory: 10M
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 80
+        initialDelaySeconds: 15
+        periodSeconds: 20
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 80
+        initialDelaySeconds: 5
+        periodSeconds: 10
+    hpa:
+      cpuUsage: '250m'
+      memoryUsage: '250M'
+      minReplicas: 3
+      maxReplicas: 10
+    service:
+      domain: 'domain.com'
+      port: '80'
+    volumes:
+      - name: message
+        configMap:
+          name: myapp-config
+    volumeMounts:
+      - name: message
+        readOnly: true
+        mountPath: /usr/share/nginx/html/message.txt
